@@ -76,10 +76,13 @@ def solve_route():
     lengths_sorted = sorted(groups.keys(), reverse=True)
     result_groups = [{"length": l, "words": groups[l]} for l in lengths_sorted]
 
+    total_words = sum(len(g["words"]) for g in result_groups)
+    total_score = sum(w["score"] for g in result_groups for w in g["words"])
+
     return jsonify({
         "grid":        grid,
-        "total_words": len(found),
-        "total_score": sum(v["score"] for v in found.values()),
+        "total_words": total_words,
+        "total_score": total_score,
         "elapsed":     elapsed,
         "groups":      result_groups,
     })

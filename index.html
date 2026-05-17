@@ -440,25 +440,45 @@ function showPath(word, path, chipEl) {
   chipEl.parentNode.insertBefore(panel, chipEl.nextSibling);
   panel.style.display = 'block';
 
-  // Fetch Definition
+  // Fetch Definition — try multiple sources
   const defEl = document.getElementById('word-definition');
   defEl.style.display = 'block';
   defEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;"></span> Looking up meaning...';
-  
-  fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
-    .then(r => r.json())
-    .then(data => {
-      if(Array.isArray(data) && data[0].meanings) {
-        const type = data[0].meanings[0].partOfSpeech;
-        const def = data[0].meanings[0].definitions[0].definition;
-        defEl.innerHTML = `<strong style="color:var(--accent2);">${type}.</strong> ${def}`;
-      } else {
-        defEl.innerHTML = `<span style="color:var(--muted);">No definition found in standard dictionary.</span>`;
+
+  async function lookupDefinition(w) {
+    // Try Free Dictionary API first
+    try {
+      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${w.toLowerCase()}`);
+      const data = await r.json();
+      if(Array.isArray(data) && data[0] && data[0].meanings && data[0].meanings.length > 0) {
+        const meaning = data[0].meanings[0];
+        const def = meaning.definitions[0].definition;
+        const type = meaning.partOfSpeech;
+        const phonetic = data[0].phonetic ? `<span style="color:var(--muted);font-size:0.8em;"> ${data[0].phonetic}</span>` : '';
+        return `<strong style="color:var(--accent2);">${type}${phonetic}.</strong> ${def}`;
       }
-    })
-    .catch(() => {
-      defEl.innerHTML = `<span style="color:var(--muted);">Could not load definition.</span>`;
-    });
+    } catch(e) {}
+
+    // Fallback: try looking up base word (strip -s, -ed, -ing) and label it
+    const stripped = w.toLowerCase().replace(/ing$/, '').replace(/ed$/, '').replace(/s$/, '');
+    if(stripped !== w.toLowerCase() && stripped.length >= 3) {
+      try {
+        const r2 = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${stripped}`);
+        const data2 = await r2.json();
+        if(Array.isArray(data2) && data2[0] && data2[0].meanings && data2[0].meanings.length > 0) {
+          const meaning = data2[0].meanings[0];
+          const def = meaning.definitions[0].definition;
+          const type = meaning.partOfSpeech;
+          const suffix = w.toLowerCase() !== stripped ? ` <span style="color:var(--muted);font-size:0.8em;">(form of "${stripped.toUpperCase()}")</span>` : '';
+          return `<strong style="color:var(--accent2);">${type}${suffix}.</strong> ${def}`;
+        }
+      } catch(e) {}
+    }
+
+    return `<span style="color:var(--muted);">Scrabble-valid word — no common definition found. Tap Ban if your game rejects it.</span>`;
+  }
+
+  lookupDefinition(word).then(html => { defEl.innerHTML = html; });
 
   // Draw lines on canvas after layout settles
   requestAnimationFrame(() => requestAnimationFrame(() => drawPathLines(path, n)));
