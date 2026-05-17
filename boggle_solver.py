@@ -79,17 +79,64 @@ def load_dictionary(min_len=3) -> Trie:
             for line in f:
                 bad_words.add(line.strip().lower())
 
+    # Load common English words for stemming-based meaning check
+    COMMON_FILE = SCRIPT_DIR / "common_english.txt"
+    common = set()
+    if COMMON_FILE.exists():
+        with open(COMMON_FILE) as f:
+            for line in f:
+                w = line.strip().lower()
+                if w.isalpha():
+                    common.add(w)
+        # Also add words_alpha short words (3-5 letters) — all universally valid in Boggle
+        if WORD_FILE.exists():
+            with open(WORD_FILE) as f:
+                for line in f:
+                    w = line.strip().lower()
+                    if w.isalpha() and 3 <= len(w) <= 5:
+                        common.add(w)
+        print(f"  ✓  Loaded {len(common):,} common/short English words for meaning check")
+
+    def base_forms(word):
+        """Return possible base forms of an inflected word."""
+        bases = {word}
+        for suffix in ['ing', 'ed', 'er', 'ers', 'est', 'ness',
+                        'ment', 'tion', 'tions', 'ly', 'ies', 'es', 's']:
+            if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+                base = word[:-len(suffix)]
+                bases.add(base)
+                # double-consonant drop: running→run, gibbing→gib
+                if len(base) >= 2 and base[-1] == base[-2]:
+                    bases.add(base[:-1])
+                # e-restore: loving→love, having→have
+                bases.add(base + 'e')
+        return bases
+
+    def is_meaningful(word):
+        """True if word or any of its base forms is a common English word."""
+        if not common:
+            return True  # no filter if common list not loaded
+        for base in base_forms(word):
+            if base in common:
+                return True
+        return False
+
     count = 0
     with open(src) as f:
         for line in f:
             word = line.strip().lower()
             if word in bad_words:
                 continue
+            if not is_meaningful(word):
+                continue   # skip words with no recognisable English root
             if len(word) >= min_len and word.isalpha():
                 trie.insert(word)
                 count += 1
-    print(f"  ✓  Loaded {count:,} words from {label} dictionary (filtered {len(bad_words)} bad words)\n")
+    print(f"  ✓  Loaded {count:,} meaningful words (filtered obscure + bad words)\n")
     return trie
+
+
+
 
 # ──────────────────────────────────────────────
 # GAME RULES  (matches the Netflix Boggle app)
