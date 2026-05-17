@@ -52,6 +52,7 @@ class Trie:
 SCRIPT_DIR      = Path(__file__).parent
 SCRABBLE_FILE   = SCRIPT_DIR / "scrabble_words.txt"   # preferred: no proper nouns/archaic
 WORD_FILE       = SCRIPT_DIR / "words_alpha.txt"       # fallback
+BAD_WORDS_FILE  = SCRIPT_DIR / "bad_words.txt"         # profanity filter
 
 def load_dictionary(min_len=3) -> Trie:
     trie = Trie()
@@ -71,14 +72,23 @@ def load_dictionary(min_len=3) -> Trie:
         src = SCRABBLE_FILE
         label = "Scrabble"
 
+    # Load bad words
+    bad_words = set()
+    if BAD_WORDS_FILE.exists():
+        with open(BAD_WORDS_FILE) as f:
+            for line in f:
+                bad_words.add(line.strip().lower())
+
     count = 0
     with open(src) as f:
         for line in f:
             word = line.strip().lower()
+            if word in bad_words:
+                continue
             if len(word) >= min_len and word.isalpha():
                 trie.insert(word)
                 count += 1
-    print(f"  ✓  Loaded {count:,} words from {label} dictionary\n")
+    print(f"  ✓  Loaded {count:,} words from {label} dictionary (filtered {len(bad_words)} bad words)\n")
     return trie
 
 # ──────────────────────────────────────────────

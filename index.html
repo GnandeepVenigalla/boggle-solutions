@@ -113,7 +113,7 @@
   .chip-7{border-left:3px solid #f97316;} .chip-8p{border-left:3px solid #ef4444;}
 
   /* ── path visualizer ── */
-  #path-panel{display:none;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
+  #path-panel{display:none; width:100%; flex-basis:100%; margin:10px 0; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px;}
   .path-word{font-size:1rem;font-weight:800;letter-spacing:.06em;color:var(--accent2);margin-bottom:10px;text-align:center;cursor:pointer;}
   #path-board-wrap{position:relative;display:block;width:100%;}
   #path-board{display:grid;gap:5px;position:relative;z-index:1;}
@@ -152,10 +152,14 @@
         </div>
 
         <div class="section-label">⚡ Quick type — type all letters in order:</div>
-        <input type="text" id="quick-input"
-          placeholder="e.g. EAWQFLRTIGMIIFUOGNZTINEEU"
-          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-          oninput="quickFill(this.value)">
+        <div style="position:relative; width:100%; margin-bottom:16px;">
+          <input type="text" id="quick-input"
+            placeholder="e.g. EAWQFLRTIGMIIFUOGNZTINEEU"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            oninput="quickFill(this.value)"
+            style="margin-bottom:0; padding-right:45px;">
+          <button onclick="clearBoard()" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.1); border:none; color:var(--text); width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:12px; transition:all 0.2s;" title="Clear Board">✖</button>
+        </div>
 
         <div id="letter-grid"></div>
         <div id="grid-status"></div>
@@ -191,6 +195,8 @@
             <div id="path-board"></div>
             <canvas id="path-canvas"></canvas>
           </div>
+          <div id="word-definition" style="display:none; margin-top:12px; font-size:0.85rem; line-height:1.4; color:var(--text); background:var(--card); padding:10px; border-radius:8px; border:1px solid var(--border);"></div>
+          <button onclick="banCurrentWord()" style="margin-top:14px; width:100%; padding:10px; background:transparent; border:1px solid rgba(239, 68, 68, 0.5); border-radius:8px; color:#ef4444; font-weight:700; cursor:pointer; transition:all 0.2s;">🚫 Not a word? Ban it forever</button>
         </div>
 
         <div id="search-wrap">
@@ -221,6 +227,12 @@ function setSize(n,btn){
   btn.classList.add('active');
   buildGrid(n);
   document.getElementById('quick-input').value='';
+  document.getElementById('quick-input').focus();
+}
+
+function clearBoard() {
+  document.getElementById('quick-input').value='';
+  buildGrid(currentGridSize);
   document.getElementById('quick-input').focus();
 }
 
@@ -349,6 +361,7 @@ async function doSolve(){
     if(grid.flat().includes('?')) throw new Error('Please fill in all letters first');
     const r=await fetch('/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grid})});
     data=await r.json(); if(!r.ok) throw new Error(data.error||'Server error');
+    
     render(data);
   } catch(err){ alert('❌ '+err.message); }
   finally{ btn.disabled=false; lbl.textContent='🔍 Find All Words'; document.getElementById('grid-status').textContent=''; }
@@ -356,6 +369,7 @@ async function doSolve(){
 
 let currentGrid = null;
 let selectedChip = null;
+let currentPathWord = null;
 
 function render(data){
   currentGrid = data.grid;   // save for path drawing
@@ -367,6 +381,7 @@ function render(data){
 
   document.getElementById('path-panel').style.display='none';
   selectedChip=null;
+  currentPathWord=null;
   document.getElementById('search-wrap').style.display='block';
   document.getElementById('word-search').value='';
   document.getElementById('empty-state').style.display='none';
@@ -378,12 +393,14 @@ function render(data){
 function showPath(word, path, chipEl) {
   if (!currentGrid) return;
   const n = currentGrid.length;
+  currentPathWord = word;
 
   // Toggle: click same word again to close
   if (selectedChip === chipEl) {
     document.getElementById('path-panel').style.display = 'none';
     chipEl.classList.remove('selected');
     selectedChip = null;
+    currentPathWord = null;
     return;
   }
   if (selectedChip) selectedChip.classList.remove('selected');
@@ -419,7 +436,29 @@ function showPath(word, path, chipEl) {
     }
   }
 
-  document.getElementById('path-panel').style.display = 'block';
+  const panel = document.getElementById('path-panel');
+  chipEl.parentNode.insertBefore(panel, chipEl.nextSibling);
+  panel.style.display = 'block';
+
+  // Fetch Definition
+  const defEl = document.getElementById('word-definition');
+  defEl.style.display = 'block';
+  defEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;"></span> Looking up meaning...';
+  
+  fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
+    .then(r => r.json())
+    .then(data => {
+      if(Array.isArray(data) && data[0].meanings) {
+        const type = data[0].meanings[0].partOfSpeech;
+        const def = data[0].meanings[0].definitions[0].definition;
+        defEl.innerHTML = `<strong style="color:var(--accent2);">${type}.</strong> ${def}`;
+      } else {
+        defEl.innerHTML = `<span style="color:var(--muted);">No definition found in standard dictionary.</span>`;
+      }
+    })
+    .catch(() => {
+      defEl.innerHTML = `<span style="color:var(--muted);">Could not load definition.</span>`;
+    });
 
   // Draw lines on canvas after layout settles
   requestAnimationFrame(() => requestAnimationFrame(() => drawPathLines(path, n)));
@@ -503,7 +542,10 @@ function drawPathLines(path, n) {
 function chipCls(l){if(l<=3)return'chip-3';if(l===4)return'chip-4';if(l===5)return'chip-5';if(l===6)return'chip-6';if(l===7)return'chip-7';return'chip-8p';}
 
 function renderWords(groups){
-  const c=document.getElementById('word-list'); c.innerHTML='';
+  const c=document.getElementById('word-list'); 
+  const panel = document.getElementById('path-panel');
+  if (panel && panel.parentNode !== document.body) document.body.appendChild(panel);
+  c.innerHTML='';
   const f=document.getElementById('word-search').value.toUpperCase();
   groups.forEach(g=>{
     const ws=f?g.words.filter(w=>w.word.includes(f)):g.words;
@@ -526,6 +568,37 @@ function renderWords(groups){
 }
 
 function filterWords(){renderWords(allGroups);}
+
+async function banCurrentWord() {
+  if (!currentPathWord) return;
+  const word = currentPathWord;
+  
+  // Sync to server
+  fetch('/ban', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({word: word})
+  }).catch(err => console.error(err));
+  
+  // Instantly remove from UI
+  let newTotalWords = 0;
+  let newTotalScore = 0;
+  allGroups.forEach(g => {
+    g.words = g.words.filter(w => w.word !== word);
+    newTotalWords += g.words.length;
+    newTotalScore += g.words.reduce((sum, w) => sum + w.score, 0);
+  });
+  
+  document.getElementById('sw').textContent = newTotalWords.toLocaleString();
+  document.getElementById('ss').textContent = newTotalScore;
+  
+  document.getElementById('path-panel').style.display = 'none';
+  if (selectedChip) selectedChip.classList.remove('selected');
+  selectedChip = null;
+  currentPathWord = null;
+  
+  renderWords(allGroups);
+}
 </script>
 </body>
 </html>

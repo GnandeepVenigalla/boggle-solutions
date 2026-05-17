@@ -16,6 +16,14 @@ app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024   # 1 MB max (no images)
 # ── Load dictionary once at startup ────────────────────────────
 print("Loading dictionary …")
 TRIE = load_dictionary(min_len=3)
+
+USER_BANNED_FILE = Path(__file__).parent / "user_banned.txt"
+USER_BANNED = set()
+if USER_BANNED_FILE.exists():
+    with open(USER_BANNED_FILE) as f:
+        for line in f:
+            USER_BANNED.add(line.strip().lower())
+print(f"Loaded {len(USER_BANNED)} user-banned words.")
 print("Ready!\n")
 
 # ── Routes ──────────────────────────────────────────────────────
@@ -54,6 +62,8 @@ def solve_route():
     # Group words by length
     groups: dict[int, list] = {}
     for word, info in found.items():
+        if word.lower() in USER_BANNED:
+            continue
         groups.setdefault(len(word), []).append({
             "word":  word.upper(),
             "score": info["score"],
@@ -73,6 +83,18 @@ def solve_route():
         "elapsed":     elapsed,
         "groups":      result_groups,
     })
+
+@app.route("/ban", methods=["POST"])
+def ban_route():
+    data = request.get_json()
+    word = data.get("word")
+    if word:
+        word = word.lower()
+        if word not in USER_BANNED:
+            USER_BANNED.add(word)
+            with open(USER_BANNED_FILE, "a") as f:
+                f.write(word + "\n")
+    return jsonify({"status": "success"})
 
 if __name__ == "__main__":
     print("\n🎲 Boggle Solver — http://localhost:5050\n")
