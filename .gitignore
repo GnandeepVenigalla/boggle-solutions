@@ -1,0 +1,14 @@
+# Don't upload the large raw dictionary (we use scrabble_words.txt)
+words_alpha.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# macOS
+.DS_Store
+
+# Local launch scripts (not needed on Vercel)
+*.command
